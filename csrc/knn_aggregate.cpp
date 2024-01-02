@@ -46,6 +46,39 @@ std::vector<torch::Tensor> knn_aggregate_aniso_forward(
     return knn_aggregate_aniso_forward_cuda(q, p, f, sigma, R, K);
 }
 
+std::vector<torch::Tensor> knn_aggregate_aniso_backward(
+    const torch::Tensor grad_f_out,
+    const torch::Tensor grad_w_out,
+    const torch::Tensor q,
+    const torch::Tensor p,
+    const torch::Tensor f,
+    const torch::Tensor sigma,
+    const torch::Tensor R,
+    const torch::Tensor w_out,
+    const torch::Tensor k_idxs
+) {
+    CHECK_INPUT(grad_f_out);
+    CHECK_INPUT(grad_w_out);
+    CHECK_INPUT(q);
+    CHECK_INPUT(p);
+    CHECK_INPUT(f);
+    CHECK_INPUT(sigma);
+    CHECK_INPUT(R);
+    CHECK_INPUT(w_out);
+    CHECK_INPUT(k_idxs);
+    return knn_aggregate_aniso_backward_cuda(
+        grad_f_out, 
+        grad_w_out, 
+        q, 
+        p, 
+        f, 
+        sigma, 
+        R, 
+        w_out,
+        k_idxs
+    );
+}
+
 
 /*
 This macro defines the function that will be called when the Python code imports the extension.
@@ -53,4 +86,5 @@ This macro defines the function that will be called when the Python code imports
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("knn_aggregate_forward", &knn_aggregate_forward, "KNN aggregate forward");
     m.def("knn_aggregate_aniso_forward", &knn_aggregate_aniso_forward, "KNN aggregate aniso forward");
+    m.def("knn_aggregate_aniso_backward", &knn_aggregate_aniso_backward, "KNN aggregate aniso backward");
 }
