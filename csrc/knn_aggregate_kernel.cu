@@ -146,16 +146,29 @@ __global__ void knn_aggregate_aniso_backward_cuda_kernel(
         // TODO: dLdp
         // TODO: dLdf
 
-        // dLdsigma
+        // the following will be added F times, but in fact it should be added only once 
+        // -> divided by F so it sums up correctly!
+        scalar_t w = w_out[b][n_q][n_k];
+        scalar_t j_sq = j * j;
+        scalar_t k_sq = k * k;
+        scalar_t l_sq = l * l;
+        //////////////////////
+        //     dLdsigma     //
+        //////////////////////
         for (int n_f = 0; n_f < F; ++n_f) {
             // dwdsigma = -w * d/dsigma(exp(...)) = -w * j^2
-            // dLdsigma = dLdw * dwdsigma
-            scalar_t dLdw_w = grad_f_out[b][n_q][n_f] * f[b][k_idx][n_f] * -w_out[b][n_q][n_k];
+            // dL1dsigma = (dL1df * dfdw + dLdw) * dwdsigma
+            scalar_t dL1df_dfdw_w = grad_f_out[b][n_q][n_f] * f[b][k_idx][n_f] * -w;
             // to avoid race condition
-            atomicAdd(&dLdsigma[b][k_idx][0], dLdw_w * j * j);
-            atomicAdd(&dLdsigma[b][k_idx][1], dLdw_w * k * k);
-            atomicAdd(&dLdsigma[b][k_idx][2], dLdw_w * l * l);
+            atomicAdd(&dLdsigma[b][k_idx][0], dL1df_dfdw_w * j_sq);
+            atomicAdd(&dLdsigma[b][k_idx][1], dL1df_dfdw_w * k_sq);
+            atomicAdd(&dLdsigma[b][k_idx][2], dL1df_dfdw_w * l_sq);
         }
+        // add the part that's directly computed w.r.t w dL2dw * dwdsigma
+        scalar_t dL2dw_w = grad_w_out[b][n_q][n_k] * -w; 
+        atomicAdd(&dLdsigma[b][k_idx][0], dL2dw_w * j_sq);
+        atomicAdd(&dLdsigma[b][k_idx][1], dL2dw_w * k_sq);
+        atomicAdd(&dLdsigma[b][k_idx][2], dL2dw_w * l_sq);
     }
 }
 

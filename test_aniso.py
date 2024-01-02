@@ -1,6 +1,7 @@
 import torch
 import cuda_knn_aggregate
 from einops import rearrange
+import numpy as np
 from core.knn_aggregate import KNNAnisotropicAggregate
 import pytorch3d.transforms as p3dt
 
@@ -40,9 +41,9 @@ def torch_aggregate(
 
 if __name__ == '__main__':
     import time
-    B, Q, F = 5, 32, 61
-    P = 16
-    K = 7
+    B, Q, F = 9, 236, 64
+    P = 31
+    K = 6
 
     T = 50
     N = 100 + T
@@ -68,7 +69,9 @@ if __name__ == '__main__':
         f_out, w_out, dists, idxs = KNNAnisotropicAggregate.apply(q, p, f, sigma, R, K)
         cnt_cuda += time.time() - start
 
-        f_out.sum().backward()
+        (w_out.sum() + f_out.sum()).backward()
+
+
 
         p_torch = p.detach().clone().requires_grad_(True)
         f_torch = f.detach().clone().requires_grad_(True)
@@ -76,12 +79,22 @@ if __name__ == '__main__':
         start = time.time()
         f_torch, w_torch, w_all, dist_torch, idxs_torch = torch_aggregate(q, p_torch, f_torch, sigma_torch, R, K)
         cnt_torch += time.time() - start
-        f_torch.sum().backward()
+        (w_torch.sum() + f_torch.sum()).backward()
+
 
         #assert torch.allclose(f_torch, f_out, atol=1e-6)
         if not (torch.allclose(sigma.grad, sigma_torch.grad, atol=1e-5)):
-            print("-0----0---")
-            print(f"Difference {idxs} -- {idxs_torch}")
+            thresh = 1e-4
+            inaccurate = ((sigma.grad - sigma_torch.grad).abs() > thresh).sum()
+            #print("-0----0---")
+            #print(f"Difference {idxs} -- {idxs_torch}")
+            idxs_sorted = idxs[..., :-1].sort(dim=-1).values
+            idxs_torch_sorted = idxs_torch[..., :-1].sort(dim=-1).values
+            # assert only one index is different
+            assert torch.allclose(idxs_sorted.float(), idxs_torch_sorted.float(), atol=1e-5)
+            print(f'average difference {(sigma.grad - sigma_torch.grad).abs().mean()}')
+            #inaccurate_per = (inaccurate/ np.prod(sigma.grad.shape))
+            #assert inaccurate_per < 0.1, f"sigma.grad is inaccurate in {inaccurate_per * 100:.2f}% of the cases"
 
         assert torch.allclose(dist_torch, dists, atol=1e-6)
         assert torch.allclose(w_out.sum(dim=-1, keepdim=True), w_torch, atol=1e-5)
