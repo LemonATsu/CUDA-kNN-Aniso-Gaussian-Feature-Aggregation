@@ -21,6 +21,7 @@ def torch_aggregate(
     sq_dists = ((diff[..., None, :, 0] * R).sum(dim=-1).pow(2) * sigma[:, None]).sum(dim=-1)
 
     sq_dists, k_idxs = torch.topk(sq_dists, K, dim=-1, largest=False)
+    sq_dists = sq_dists.float()
 
     offset = torch.arange(B, device=sq_dists.device)[:, None, None] * P
     idxs = rearrange(k_idxs + offset, 'b q k -> (b q) k')
@@ -41,15 +42,16 @@ def torch_aggregate(
 
 if __name__ == '__main__':
     import time
-    B, Q, F = 9, 236, 64
-    P = 31
-    K = 6
+    B, Q, F = 4, 4096, 64
+    P = 6400
+    K = 8
 
     T = 50
     N = 100 + T
 
     cnt_torch = 0.0
     cnt_cuda = 0.0
+    problem_cnt = 0
     for i in range(N):
         q = torch.rand(B, Q, 3).cuda() * 2 - 1
         p = torch.rand(B, P, 3).cuda() * 2 - 1
@@ -62,7 +64,8 @@ if __name__ == '__main__':
         if i < T:
             continue
 
-
+        p.requires_grad = True
+        f.requires_grad = True
         sigma.requires_grad = True
         start = time.time()
         #f_out, w_out, dists, idxs = cuda_knn_aggregate.knn_aggregate_aniso_forward(q, p, f, sigma, R, K)
@@ -77,28 +80,36 @@ if __name__ == '__main__':
         f_torch = f.detach().clone().requires_grad_(True)
         sigma_torch = sigma.detach().clone().requires_grad_(True)
         start = time.time()
-        f_torch, w_torch, w_all, dist_torch, idxs_torch = torch_aggregate(q, p_torch, f_torch, sigma_torch, R, K)
+        f_out_torch, w_torch, w_all, dist_torch, idxs_torch = torch_aggregate(q, p_torch, f_torch, sigma_torch, R, K)
         cnt_torch += time.time() - start
-        (w_torch.sum() + f_torch.sum()).backward()
-
+        (w_torch.sum() + f_out_torch.sum()).backward()
 
         #assert torch.allclose(f_torch, f_out, atol=1e-6)
+        idxs_sorted = idxs[..., :-1].sort(dim=-1).values
+        idxs_torch_sorted = idxs_torch[..., :-1].sort(dim=-1).values
+        """
         if not (torch.allclose(sigma.grad, sigma_torch.grad, atol=1e-5)):
-            thresh = 1e-4
-            inaccurate = ((sigma.grad - sigma_torch.grad).abs() > thresh).sum()
-            #print("-0----0---")
-            #print(f"Difference {idxs} -- {idxs_torch}")
-            idxs_sorted = idxs[..., :-1].sort(dim=-1).values
-            idxs_torch_sorted = idxs_torch[..., :-1].sort(dim=-1).values
-            # assert only one index is different
             assert torch.allclose(idxs_sorted.float(), idxs_torch_sorted.float(), atol=1e-5)
-            print(f'average difference {(sigma.grad - sigma_torch.grad).abs().mean()}')
-            #inaccurate_per = (inaccurate/ np.prod(sigma.grad.shape))
-            #assert inaccurate_per < 0.1, f"sigma.grad is inaccurate in {inaccurate_per * 100:.2f}% of the cases"
+            print(f'average sigma difference {(sigma.grad - sigma_torch.grad).abs().mean()}')
+        """
+
+        if not (torch.allclose(f.grad, f_torch.grad, atol=1e-5)):
+            #assert torch.allclose(idxs_sorted.float(), idxs_torch_sorted.float(), atol=1e-5)
+            print(f'average f grad difference {(f.grad - f_torch.grad).abs().mean()}')
+
+        if not (torch.allclose(p.grad, p_torch.grad, atol=1e-4)):
+            assert torch.allclose(idxs_sorted.float(), idxs_torch_sorted.float(), atol=1e-5)
+            p_grad_difference = (p.grad - p_torch.grad).abs().mean()
+            print(f'average p grad difference {p_grad_difference}')
+            if p_grad_difference > 0.0001:
+                import pdb; pdb.set_trace()
+                print
+            problem_cnt += 1
 
         assert torch.allclose(dist_torch, dists, atol=1e-6)
         assert torch.allclose(w_out.sum(dim=-1, keepdim=True), w_torch, atol=1e-5)
 
     print(f'torch version : {cnt_torch:.6f}')
     print(f'_cuda version : {cnt_cuda:.6f}')
+    print(f'problem count: {problem_cnt}/{N-T}')
 

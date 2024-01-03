@@ -136,18 +136,45 @@ __global__ void knn_aggregate_aniso_backward_cuda_kernel(
 
     for (int n_k = 0; n_k < K; ++n_k) {
         int64_t k_idx = k_idxs[b][n_q][n_k]; // get the n-th ponit index
+
+        // prepare the quantities we need
         scalar_t x = q[b][n_q][0] - p[b][k_idx][0];
         scalar_t y = q[b][n_q][1] - p[b][k_idx][1];
         scalar_t z = q[b][n_q][2] - p[b][k_idx][2];
+
+        // apply rotation to the difference
         scalar_t j = R[b][k_idx][0][0] * x + R[b][k_idx][0][1] * y + R[b][k_idx][0][2] * z;
         scalar_t k = R[b][k_idx][1][0] * x + R[b][k_idx][1][1] * y + R[b][k_idx][1][2] * z;
         scalar_t l = R[b][k_idx][2][0] * x + R[b][k_idx][2][1] * y + R[b][k_idx][2][2] * z;
-
-        // TODO: dLdp
         scalar_t w = w_out[b][n_q][n_k];
+
+        // compyte dwdp
+        scalar_t dwdpx = -2 * w * (
+            -j * R[b][k_idx][0][0] * sigma[b][k_idx][0] +
+            -k * R[b][k_idx][1][0] * sigma[b][k_idx][1] +
+            -l * R[b][k_idx][2][0] * sigma[b][k_idx][2]
+        );
+
+        scalar_t dwdpy = -2 * w * (
+            -j * R[b][k_idx][0][1] * sigma[b][k_idx][0] +
+            -k * R[b][k_idx][1][1] * sigma[b][k_idx][1] +
+            -l * R[b][k_idx][2][1] * sigma[b][k_idx][2]
+        );
+
+        scalar_t dwdpz = -2 * w * (
+            -j * R[b][k_idx][0][2] * sigma[b][k_idx][0] +
+            -k * R[b][k_idx][1][2] * sigma[b][k_idx][1] +
+            -l * R[b][k_idx][2][2] * sigma[b][k_idx][2]
+        );
+
         scalar_t j_sq = j * j;
         scalar_t k_sq = k * k;
         scalar_t l_sq = l * l;
+
+        scalar_t dwdsigmax = -w * j_sq;
+        scalar_t dwdsigmay = -w * k_sq;
+        scalar_t dwdsigmaz = -w * l_sq;
+
         /////////////////////////////
         //     dLdsigma and dLdf   //
         /////////////////////////////
@@ -155,19 +182,29 @@ __global__ void knn_aggregate_aniso_backward_cuda_kernel(
             // dwdsigma = -w * d/dsigma(exp(...)) = -w * j^2
             // dL1dsigma = (dL1dfo * dfodw + dLdw) * dwdsigma
             scalar_t grad_fo = grad_f_out[b][n_q][n_f];
-            scalar_t dL1dfo_dfodw_w = grad_fo * f[b][k_idx][n_f] * -w;
-            // to avoid race condition
-            atomicAdd(&dLdsigma[b][k_idx][0], dL1dfo_dfodw_w * j_sq);
-            atomicAdd(&dLdsigma[b][k_idx][1], dL1dfo_dfodw_w * k_sq);
-            atomicAdd(&dLdsigma[b][k_idx][2], dL1dfo_dfodw_w * l_sq);
+            scalar_t dL1dfo_dfodw = grad_fo * f[b][k_idx][n_f]; 
+            // use atomicAdd to avoid race condition
+            atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw * dwdpx);
+            atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw * dwdpy);
+            atomicAdd(&dLdp[b][k_idx][2], dL1dfo_dfodw * dwdpz);
 
             atomicAdd(&dLdf[b][k_idx][n_f], grad_fo * w);
+
+            atomicAdd(&dLdsigma[b][k_idx][0], dL1dfo_dfodw * dwdsigmax);
+            atomicAdd(&dLdsigma[b][k_idx][1], dL1dfo_dfodw * dwdsigmay);
+            atomicAdd(&dLdsigma[b][k_idx][2], dL1dfo_dfodw * dwdsigmaz);
+
         }
-        // add the part that's directly computed w.r.t w dL2dw * dwdsigma
-        scalar_t dL2dw_w = grad_w_out[b][n_q][n_k] * -w; 
-        atomicAdd(&dLdsigma[b][k_idx][0], dL2dw_w * j_sq);
-        atomicAdd(&dLdsigma[b][k_idx][1], dL2dw_w * k_sq);
-        atomicAdd(&dLdsigma[b][k_idx][2], dL2dw_w * l_sq);
+        // add gradient from dL2dw, i.e., the case where we use w_out somewhere
+        scalar_t dL2dw = grad_w_out[b][n_q][n_k]; 
+        atomicAdd(&dLdp[b][k_idx][0], dL2dw * dwdpx);
+        atomicAdd(&dLdp[b][k_idx][1], dL2dw * dwdpy);
+        atomicAdd(&dLdp[b][k_idx][2], dL2dw * dwdpz);
+
+        atomicAdd(&dLdsigma[b][k_idx][0], dL2dw * dwdsigmax);
+        atomicAdd(&dLdsigma[b][k_idx][1], dL2dw * dwdsigmay);
+        atomicAdd(&dLdsigma[b][k_idx][2], dL2dw * dwdsigmaz);
+
     }
 }
 
