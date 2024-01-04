@@ -31,15 +31,20 @@ class KNNAnisotropicAggregate(torch.autograd.Function):
         return f_out, w_out, dists, idxs
     
     @staticmethod
-    def backward(ctx, grad_f_out, grad_w_out, grad_dists, grad_idxs):
+    def backward(
+        ctx, 
+        grad_f_out: torch.Tensor, 
+        grad_w_out: torch.Tensor, 
+        grad_dists: torch.Tensor, 
+        grad_idxs: torch.Tensor,
+    ):
         """ Backward pass. 
-        # TODO: grad_w is probably gonna be used for weighting the PE. Handle that!
         """
         q, p, f, sigma, R, w_out, idxs = ctx.saved_tensors
         
         # df/dw is simply the sum of the feature vector.
         # FIXME: is there a better naming?
-        grad_p, grad_f, grad_sigma = cuda_knn_aggregate.knn_aggregate_aniso_backward(
+        grad_q, grad_p, grad_f, grad_sigma = KNNAnisotropicAggregateBackward.apply(
             grad_f_out.contiguous(),
             grad_w_out.contiguous(),
             q, 
@@ -50,4 +55,87 @@ class KNNAnisotropicAggregate(torch.autograd.Function):
             w_out, 
             idxs
         )
-        return None, grad_p, grad_f, grad_sigma, None, None
+        return grad_q, grad_p, grad_f, grad_sigma, None, None
+    
+
+class KNNAnisotropicAggregateBackward(torch.autograd.Function):
+
+    @staticmethod
+    def forward(
+        ctx, 
+        grad_f_out: torch.Tensor, 
+        grad_w_out: torch.Tensor, 
+        q: torch.Tensor,
+        p: torch.Tensor,
+        f: torch.Tensor,
+        sigma: torch.Tensor,
+        R: torch.Tensor,
+        w_out: torch.Tensor,
+        idxs: torch.Tensor,
+    ):
+        """ Backward pass. 
+        """
+        # df/dw is simply the sum of the feature vector.
+        # FIXME: is there a better naming?
+        grad_q, grad_p, grad_f, grad_sigma = cuda_knn_aggregate.knn_aggregate_aniso_backward(
+            grad_f_out.contiguous(),
+            grad_w_out.contiguous(),
+            q, 
+            p, 
+            f, 
+            sigma, 
+            R, 
+            w_out, 
+            idxs
+        )
+        ctx.save_for_backward(
+            grad_q,
+            grad_p,
+            grad_f,
+            grad_sigma,
+            grad_f_out,
+            grad_w_out,
+            q,
+            p,
+            f,
+            sigma,
+            R,
+            w_out,
+            idxs,
+        )
+        return grad_q, grad_p, grad_f, grad_sigma
+    
+    @staticmethod
+    def backward(
+        ctx, 
+        grad_grad_q: torch.Tensor,
+        grad_grad_p: torch.Tensor, 
+        grad_grad_f: torch.Tensor, 
+        grad_grad_sigma: torch.Tensor,
+    ):
+        """ Backward pass only for Eikonal 2nd order backprop!
+        """
+        assert grad_grad_p.sum() == 0.0, "Only supports backward via gradient of q!"
+        assert grad_grad_f.sum() == 0.0, "Only supports backward via gradient of q!"
+        assert grad_grad_sigma.sum() == 0.0, "Only supports backward via gradient of q!"
+        grad_q, grad_p, grad_f, grad_sigma, grad_f_out, grad_w_out, q, p, f, sigma, R, w_out, idxs = ctx.saved_tensors 
+
+        import pdb; pdb.set_trace()
+        print
+        grad_p_2nd, grad_f_2nd, grad_sigma_2nd = cuda_knn_aggregate.knn_aggregate_aniso_backward_2nd(
+            grad_grad_q.contiguous(),
+            grad_f_out.contiguous(),
+            grad_w_out.contiguous(),
+            grad_p.contiguous(),
+            grad_f.contiguous(),
+            grad_sigma.contiguous(),
+            q, 
+            p, 
+            f, 
+            sigma, 
+            R, 
+            w_out, 
+            idxs
+        )
+
+        return None, None, None, grad_p_2nd, None, None, None, None, None

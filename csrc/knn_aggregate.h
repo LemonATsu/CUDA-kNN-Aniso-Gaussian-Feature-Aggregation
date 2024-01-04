@@ -37,3 +37,20 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_cuda(
     const torch::Tensor w_out,
     const torch::Tensor k_idxs
 );
+
+
+std::vector<torch::Tensor> knn_aggregate_aniso_backward_2nd_cuda(
+    const torch::Tensor grad_grad_q,
+    const torch::Tensor grad_f_out,
+    const torch::Tensor grad_w_out,
+    const torch::Tensor grad_p,
+    const torch::Tensor grad_f,
+    const torch::Tensor grad_sigma,
+    const torch::Tensor q,
+    const torch::Tensor p,
+    const torch::Tensor f,
+    const torch::Tensor sigma,
+    const torch::Tensor R,
+    const torch::Tensor w_out,
+    const torch::Tensor k_idxs
+);
