@@ -225,9 +225,6 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
     const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> grad_grad_q,
     const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> grad_f_out,
     const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> grad_w_out,
-    const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> grad_p,
-    const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> grad_f,
-    const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> grad_sigma,
     const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> q,
     const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> p,
     const torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> f,
@@ -250,7 +247,6 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
     scalar_t dLddqx = grad_grad_q[b][n_q][0];
     scalar_t dLddqy = grad_grad_q[b][n_q][1];
     scalar_t dLddqz = grad_grad_q[b][n_q][2];
-    scalar_t dLddq = dLddqx + dLddqy + dLddqz;
 
     for (int n_k = 0; n_k < K; ++n_k) {
         int64_t k_idx = k_idxs[b][n_q][n_k]; // get the n-th ponit index
@@ -264,90 +260,51 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
         scalar_t j = R[b][k_idx][0][0] * x + R[b][k_idx][0][1] * y + R[b][k_idx][0][2] * z;
         scalar_t k = R[b][k_idx][1][0] * x + R[b][k_idx][1][1] * y + R[b][k_idx][1][2] * z;
         scalar_t l = R[b][k_idx][2][0] * x + R[b][k_idx][2][1] * y + R[b][k_idx][2][2] * z;
-        scalar_t w = w_out[b][n_q][n_k];
 
         // these quantities will be used again
-        scalar_t dotx = (
-            j * R[b][k_idx][0][0] * sigma[b][k_idx][0] +
-            k * R[b][k_idx][1][0] * sigma[b][k_idx][1] +
-            l * R[b][k_idx][2][0] * sigma[b][k_idx][2]
-        );
-        scalar_t doty = (
-            j * R[b][k_idx][0][1] * sigma[b][k_idx][0] +
-            k * R[b][k_idx][1][1] * sigma[b][k_idx][1] +
-            l * R[b][k_idx][2][1] * sigma[b][k_idx][2]
-        );
-        scalar_t dotz = (
-            j * R[b][k_idx][0][2] * sigma[b][k_idx][0] +
-            k * R[b][k_idx][1][2] * sigma[b][k_idx][1] +
-            l * R[b][k_idx][2][2] * sigma[b][k_idx][2]
-        );
+        scalar_t sigma_x = sigma[b][k_idx][0];
+        scalar_t sigma_y = sigma[b][k_idx][1];
+        scalar_t sigma_z = sigma[b][k_idx][2];
+        scalar_t Ra = R[b][k_idx][0][0];
+        scalar_t Rb = R[b][k_idx][0][1];
+        scalar_t Rc = R[b][k_idx][0][2];
+        scalar_t Rd = R[b][k_idx][1][0];
+        scalar_t Re = R[b][k_idx][1][1];
+        scalar_t Rf = R[b][k_idx][1][2];
+        scalar_t Rg = R[b][k_idx][2][0];
+        scalar_t Rh = R[b][k_idx][2][1];
+        scalar_t Ri = R[b][k_idx][2][2];
+
+        scalar_t sigmax_a = sigma_x * Ra;
+        scalar_t sigmax_b = sigma_x * Rb;
+        scalar_t sigmax_c = sigma_x * Rc;
+        scalar_t sigmay_d = sigma_y * Rd;
+        scalar_t sigmay_e = sigma_y * Re;
+        scalar_t sigmay_f = sigma_y * Rf;
+        scalar_t sigmaz_g = sigma_z * Rg;
+        scalar_t sigmaz_h = sigma_z * Rh;
+        scalar_t sigmaz_i = sigma_z * Ri;
+
+
+        scalar_t dotx = (j * sigmax_a + k * sigmay_d + l * sigmaz_g);
+        scalar_t doty = (j * sigmax_b + k * sigmay_e + l * sigmaz_h);
+        scalar_t dotz = (j * sigmax_c + k * sigmay_f + l * sigmaz_i);
 
         // these are the same as in 1st order
         // TODO: can be replaced by for loop, but do we want to do that?
-        scalar_t dwdpx = -2 * w * -dotx;
-        scalar_t dwdpy = -2 * w * -doty;
-        scalar_t dwdpz = -2 * w * -dotz; 
-        scalar_t dotRxx = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][0] * R[b][k_idx][0][0] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][0] * R[b][k_idx][1][0] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][0] * R[b][k_idx][2][0] 
-        );
-        scalar_t dotRxy = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][0] * R[b][k_idx][0][1] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][0] * R[b][k_idx][1][1] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][0] * R[b][k_idx][2][1] 
-        );
-        scalar_t dotRxz = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][0] * R[b][k_idx][0][2] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][0] * R[b][k_idx][1][2] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][0] * R[b][k_idx][2][2] 
-        );
-        scalar_t dotRyx = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][1] * R[b][k_idx][0][0] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][1] * R[b][k_idx][1][0] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][1] * R[b][k_idx][2][0] 
-        );
-        scalar_t dotRyy = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][1] * R[b][k_idx][0][1] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][1] * R[b][k_idx][1][1] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][1] * R[b][k_idx][2][1] 
-        );
-        scalar_t dotRyz = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][1] * R[b][k_idx][0][2] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][1] * R[b][k_idx][1][2] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][1] * R[b][k_idx][2][2] 
-        );
-        scalar_t dotRzx = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][2] * R[b][k_idx][0][0] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][2] * R[b][k_idx][1][0] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][2] * R[b][k_idx][2][0] 
-        );
-        scalar_t dotRzy = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][2] * R[b][k_idx][0][1] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][2] * R[b][k_idx][1][1] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][2] * R[b][k_idx][2][1] 
-        );
-        scalar_t dotRzz = (
-            sigma[b][k_idx][0] * R[b][k_idx][0][2] * R[b][k_idx][0][2] +
-            sigma[b][k_idx][1] * R[b][k_idx][1][2] * R[b][k_idx][1][2] +
-            sigma[b][k_idx][2] * R[b][k_idx][2][2] * R[b][k_idx][2][2] 
-        );
 
-        scalar_t dwdpx_dotx = dwdpx * dotx;
-        scalar_t dwdpy_doty = dwdpy * doty;
-        scalar_t dwdpz_dotz = dwdpz * dotz;
-        scalar_t d_dwdqx_dqx = -2 * (dwdpx * dotx - w * dotRxx);
-        scalar_t d_dwdqx_dqy = -2 * (dwdpy * dotx - w * dotRxy);
-        scalar_t d_dwdqx_dqz = -2 * (dwdpz * dotx - w * dotRxz);
+        scalar_t w_m2 = -2 * w_out[b][n_q][n_k];
+        scalar_t d_dwdqx_dqx = (2 * dotx * dotx - (sigmax_a * Ra + sigmay_d * Rd + sigmaz_g * Rg));
+        scalar_t d_dwdqx_dqy = (2 * doty * dotx - (sigmax_a * Rb + sigmay_d * Re + sigmaz_g * Rh));
+        scalar_t d_dwdqx_dqz = (2 * dotz * dotx - (sigmax_a * Rc + sigmay_d * Rf + sigmaz_g * Ri));
 
-        scalar_t d_dwdqy_dqx = -2 * (dwdpx * doty - w * dotRyx);
-        scalar_t d_dwdqy_dqy = -2 * (dwdpy * doty - w * dotRyy);
-        scalar_t d_dwdqy_dqz = -2 * (dwdpz * doty - w * dotRyz);
+        scalar_t d_dwdqy_dqx = (2 * dotx * doty - (sigmax_b * Ra + sigmay_e * Rd + sigmaz_h * Rg));
+        scalar_t d_dwdqy_dqy = (2 * doty * doty - (sigmax_b * Rb + sigmay_e * Re + sigmaz_h * Rh));
+        scalar_t d_dwdqy_dqz = (2 * dotz * doty - (sigmax_b * Rc + sigmay_e * Rf + sigmaz_h * Ri));
 
-        scalar_t d_dwdqz_dqx = -2 * (dwdpx * dotz - w * dotRzx);
-        scalar_t d_dwdqz_dqy = -2 * (dwdpy * dotz - w * dotRzy);
-        scalar_t d_dwdqz_dqz = -2 * (dwdpz * dotz - w * dotRzz);
+        scalar_t d_dwdqz_dqx = (2 * dotx * dotz - (sigmax_c * Ra + sigmay_f * Rd + sigmaz_i * Rg));
+        scalar_t d_dwdqz_dqy = (2 * doty * dotz - (sigmax_c * Rb + sigmay_f * Re + sigmaz_i * Rh));
+        scalar_t d_dwdqz_dqz = (2 * dotz * dotz - (sigmax_c * Rc + sigmay_f * Rf + sigmaz_i * Ri));
 
         /////////////////////////////
         //     dLdsigma and dLdf   //
@@ -355,16 +312,16 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
         for (int n_f = 0; n_f < F; ++n_f) {
             // same as before, but need to multiply by dLddqx/y/z
             scalar_t grad_fo = grad_f_out[b][n_q][n_f];
-            scalar_t dL1dfo_dfodw = grad_fo * f[b][k_idx][n_f]; 
+            scalar_t dL1dfo_dfodw_wm2 = grad_fo * f[b][k_idx][n_f] * w_m2; 
 
             // use atomicAdd to avoid race condition
             //atomicAdd(&dLdp[b][k_idx][0], dLddqx * dL1dfo_dfodw * (d_dwdqx_dqx + d_dwdqy_dqx + d_dwdqz_dqx));
             //atomicAdd(&dLdp[b][k_idx][1], dLddqy * dL1dfo_dfodw * (d_dwdqx_dqy + d_dwdqy_dqy + d_dwdqz_dqy));
             //atomicAdd(&dLdp[b][k_idx][2], dLddqz * dL1dfo_dfodw * (d_dwdqx_dqz + d_dwdqy_dqz + d_dwdqz_dqz));
 
-            atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw * (dLddqx * d_dwdqx_dqx + dLddqy * d_dwdqy_dqx + dLddqz * d_dwdqz_dqx));
-            atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw * (dLddqx * d_dwdqx_dqy + dLddqy * d_dwdqy_dqy + dLddqz * d_dwdqz_dqy));
-            atomicAdd(&dLdp[b][k_idx][2], dL1dfo_dfodw * (dLddqx * d_dwdqx_dqz + dLddqy * d_dwdqy_dqz + dLddqz * d_dwdqz_dqz));
+            atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw_wm2 * (dLddqx * d_dwdqx_dqx + dLddqy * d_dwdqy_dqx + dLddqz * d_dwdqz_dqx));
+            atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw_wm2 * (dLddqx * d_dwdqx_dqy + dLddqy * d_dwdqy_dqy + dLddqz * d_dwdqz_dqy));
+            atomicAdd(&dLdp[b][k_idx][2], dL1dfo_dfodw_wm2 * (dLddqx * d_dwdqx_dqz + dLddqy * d_dwdqy_dqz + dLddqz * d_dwdqz_dqz));
         }
     }
 }
@@ -541,9 +498,6 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_2nd_cuda(
     const torch::Tensor grad_grad_q,
     const torch::Tensor grad_f_out,
     const torch::Tensor grad_w_out,
-    const torch::Tensor grad_p,
-    const torch::Tensor grad_f,
-    const torch::Tensor grad_sigma,
     const torch::Tensor q,
     const torch::Tensor p,
     const torch::Tensor f,
@@ -582,9 +536,6 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_2nd_cuda(
             grad_grad_q.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             grad_f_out.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             grad_w_out.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
-            grad_p.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
-            grad_f.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
-            grad_sigma.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             q.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             p.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             f.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),

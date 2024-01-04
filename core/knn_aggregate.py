@@ -89,10 +89,6 @@ class KNNAnisotropicAggregateBackward(torch.autograd.Function):
             idxs
         )
         ctx.save_for_backward(
-            grad_q,
-            grad_p,
-            grad_f,
-            grad_sigma,
             grad_f_out,
             grad_w_out,
             q,
@@ -115,20 +111,15 @@ class KNNAnisotropicAggregateBackward(torch.autograd.Function):
     ):
         """ Backward pass only for Eikonal 2nd order backprop!
         """
-        assert grad_grad_p.sum() == 0.0, "Only supports backward via gradient of q!"
-        assert grad_grad_f.sum() == 0.0, "Only supports backward via gradient of q!"
-        assert grad_grad_sigma.sum() == 0.0, "Only supports backward via gradient of q!"
-        grad_q, grad_p, grad_f, grad_sigma, grad_f_out, grad_w_out, q, p, f, sigma, R, w_out, idxs = ctx.saved_tensors 
+        #assert grad_grad_p.sum() == 0.0, "Only supports backward via gradient of q!"
+        #assert grad_grad_f.sum() == 0.0, "Only supports backward via gradient of q!"
+        #assert grad_grad_sigma.sum() == 0.0, "Only supports backward via gradient of q!"
+        grad_f_out, grad_w_out, q, p, f, sigma, R, w_out, idxs = ctx.saved_tensors 
 
-        import pdb; pdb.set_trace()
-        print
         grad_p_2nd, grad_f_2nd, grad_sigma_2nd = cuda_knn_aggregate.knn_aggregate_aniso_backward_2nd(
             grad_grad_q.contiguous(),
             grad_f_out.contiguous(),
             grad_w_out.contiguous(),
-            grad_p.contiguous(),
-            grad_f.contiguous(),
-            grad_sigma.contiguous(),
             q, 
             p, 
             f, 

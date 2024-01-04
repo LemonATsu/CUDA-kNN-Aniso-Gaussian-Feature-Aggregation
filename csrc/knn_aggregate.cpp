@@ -84,9 +84,6 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_2nd(
     const torch::Tensor grad_grad_q,
     const torch::Tensor grad_f_out,
     const torch::Tensor grad_w_out,
-    const torch::Tensor grad_p,
-    const torch::Tensor grad_f,
-    const torch::Tensor grad_sigma,
     const torch::Tensor q,
     const torch::Tensor p,
     const torch::Tensor f,
@@ -100,9 +97,6 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_2nd(
     CHECK_INPUT(grad_grad_q);
     CHECK_INPUT(grad_f_out);
     CHECK_INPUT(grad_w_out);
-    CHECK_INPUT(grad_p);
-    CHECK_INPUT(grad_f);
-    CHECK_INPUT(grad_sigma);
     CHECK_INPUT(q);
     CHECK_INPUT(p);
     CHECK_INPUT(f);
@@ -115,9 +109,6 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_2nd(
         grad_grad_q,
         grad_f_out, 
         grad_w_out, 
-        grad_p,
-        grad_f,
-        grad_sigma,
         q, 
         p, 
         f, 
