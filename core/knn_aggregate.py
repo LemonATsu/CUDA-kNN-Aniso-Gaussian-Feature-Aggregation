@@ -129,4 +129,4 @@ class KNNAnisotropicAggregateBackward(torch.autograd.Function):
             idxs
         )
 
-        return None, None, None, grad_p_2nd, None, None, None, None, None
+        return None, None, None, grad_p_2nd, None, grad_sigma_2nd, None, None, None

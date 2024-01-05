@@ -293,7 +293,7 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
         // these are the same as in 1st order
         // TODO: can be replaced by for loop, but do we want to do that?
 
-        scalar_t w_m2 = -2 * w_out[b][n_q][n_k];
+        scalar_t w = w_out[b][n_q][n_k];
         scalar_t d_dwdqx_dqx = (2 * dotx * dotx - (sigmax_a * Ra + sigmay_d * Rd + sigmaz_g * Rg));
         scalar_t d_dwdqx_dqy = (2 * doty * dotx - (sigmax_a * Rb + sigmay_d * Re + sigmaz_g * Rh));
         scalar_t d_dwdqx_dqz = (2 * dotz * dotx - (sigmax_a * Rc + sigmay_d * Rf + sigmaz_g * Ri));
@@ -306,22 +306,38 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
         scalar_t d_dwdqz_dqy = (2 * doty * dotz - (sigmax_c * Rb + sigmay_f * Re + sigmaz_i * Rh));
         scalar_t d_dwdqz_dqz = (2 * dotz * dotz - (sigmax_c * Rc + sigmay_f * Rf + sigmaz_i * Ri));
 
+        scalar_t d_dwdqx_dsigmax = 2 * w * j * (j * dotx - Ra);
+        scalar_t d_dwdqy_dsigmax = 2 * w * j * (j * doty - Rb);
+        scalar_t d_dwdqz_dsigmax = 2 * w * j * (j * dotz - Rc);
+
+        scalar_t d_dwdqx_dsigmay = 2 * w * k * (k * dotx - Rd);
+        scalar_t d_dwdqy_dsigmay = 2 * w * k * (k * doty - Re);
+        scalar_t d_dwdqz_dsigmay = 2 * w * k * (k * dotz - Rf);
+
+        scalar_t d_dwdqx_dsigmaz = 2 * w * l * (l * dotx - Rg);
+        scalar_t d_dwdqy_dsigmaz = 2 * w * l * (l * doty - Rh);
+        scalar_t d_dwdqz_dsigmaz = 2 * w * l * (l * dotz - Ri);
+
         /////////////////////////////
         //     dLdsigma and dLdf   //
         /////////////////////////////
         for (int n_f = 0; n_f < F; ++n_f) {
             // same as before, but need to multiply by dLddqx/y/z
             scalar_t grad_fo = grad_f_out[b][n_q][n_f];
-            scalar_t dL1dfo_dfodw_wm2 = grad_fo * f[b][k_idx][n_f] * w_m2; 
+            scalar_t dL1dfo_dfodw = grad_fo * f[b][k_idx][n_f]; 
 
             // use atomicAdd to avoid race condition
             //atomicAdd(&dLdp[b][k_idx][0], dLddqx * dL1dfo_dfodw * (d_dwdqx_dqx + d_dwdqy_dqx + d_dwdqz_dqx));
             //atomicAdd(&dLdp[b][k_idx][1], dLddqy * dL1dfo_dfodw * (d_dwdqx_dqy + d_dwdqy_dqy + d_dwdqz_dqy));
             //atomicAdd(&dLdp[b][k_idx][2], dLddqz * dL1dfo_dfodw * (d_dwdqx_dqz + d_dwdqy_dqz + d_dwdqz_dqz));
 
-            atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw_wm2 * (dLddqx * d_dwdqx_dqx + dLddqy * d_dwdqy_dqx + dLddqz * d_dwdqz_dqx));
-            atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw_wm2 * (dLddqx * d_dwdqx_dqy + dLddqy * d_dwdqy_dqy + dLddqz * d_dwdqz_dqy));
-            atomicAdd(&dLdp[b][k_idx][2], dL1dfo_dfodw_wm2 * (dLddqx * d_dwdqx_dqz + dLddqy * d_dwdqy_dqz + dLddqz * d_dwdqz_dqz));
+            atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw * -2 * w * (dLddqx * d_dwdqx_dqx + dLddqy * d_dwdqy_dqx + dLddqz * d_dwdqz_dqx));
+            atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw * -2 * w * (dLddqx * d_dwdqx_dqy + dLddqy * d_dwdqy_dqy + dLddqz * d_dwdqz_dqy));
+            atomicAdd(&dLdp[b][k_idx][2], dL1dfo_dfodw * -2 * w * (dLddqx * d_dwdqx_dqz + dLddqy * d_dwdqy_dqz + dLddqz * d_dwdqz_dqz));
+
+            atomicAdd(&dLdsigma[b][k_idx][0], dL1dfo_dfodw * (dLddqx * d_dwdqx_dsigmax + dLddqy * d_dwdqy_dsigmax + dLddqz * d_dwdqz_dsigmax));
+            atomicAdd(&dLdsigma[b][k_idx][1], dL1dfo_dfodw * (dLddqx * d_dwdqx_dsigmay + dLddqy * d_dwdqy_dsigmay + dLddqz * d_dwdqz_dsigmay));
+            atomicAdd(&dLdsigma[b][k_idx][2], dL1dfo_dfodw * (dLddqx * d_dwdqx_dsigmaz + dLddqy * d_dwdqy_dsigmaz + dLddqz * d_dwdqz_dsigmaz));
         }
     }
 }
