@@ -327,9 +327,7 @@ __global__ void knn_aggregate_aniso_backward_2nd_cuda_kernel(
             scalar_t dL1dfo_dfodw = grad_fo * f[b][k_idx][n_f]; 
 
             // use atomicAdd to avoid race condition
-            //atomicAdd(&dLdp[b][k_idx][0], dLddqx * dL1dfo_dfodw * (d_dwdqx_dqx + d_dwdqy_dqx + d_dwdqz_dqx));
-            //atomicAdd(&dLdp[b][k_idx][1], dLddqy * dL1dfo_dfodw * (d_dwdqx_dqy + d_dwdqy_dqy + d_dwdqz_dqy));
-            //atomicAdd(&dLdp[b][k_idx][2], dLddqz * dL1dfo_dfodw * (d_dwdqx_dqz + d_dwdqy_dqz + d_dwdqz_dqz));
+            atomicAdd(&dLdf[b][k_idx][n_f], grad_fo * (-2 * w * (dLddqx * dotx + dLddqy * doty + dLddqz * dotz)));
 
             atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw * -2 * w * (dLddqx * d_dwdqx_dqx + dLddqy * d_dwdqy_dqx + dLddqz * d_dwdqz_dqx));
             atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw * -2 * w * (dLddqx * d_dwdqx_dqy + dLddqy * d_dwdqy_dqy + dLddqz * d_dwdqz_dqy));
