@@ -25,6 +25,15 @@ std::vector<torch::Tensor> knn_aggregate_aniso_forward_cuda(
     const int K
 );
 
+std::vector<torch::Tensor> knn_lookup_aggregate_aniso_forward_cuda(
+    const torch::Tensor q,
+    const torch::Tensor p,
+    const torch::Tensor f,
+    const torch::Tensor sigma,
+    const torch::Tensor R,
+    const torch::Tensor knn_table,
+    const int K
+);
 
 std::vector<torch::Tensor> knn_aggregate_aniso_backward_cuda(
     const torch::Tensor grad_f_out,
