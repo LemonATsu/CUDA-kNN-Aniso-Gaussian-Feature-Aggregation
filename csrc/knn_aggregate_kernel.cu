@@ -271,14 +271,14 @@ __global__ void knn_aggregate_aniso_backward_cuda_kernel(
             dL1dfo_dfodw += grad_f_out[b][n_q][n_f] * f[b][k_idx][n_f]; 
             atomicAdd(&dLdf[b][k_idx][n_f], grad_f_out[b][n_q][n_f] * w);
         }
+        scalar_t dLdw = dL1dfo_dfodw + grad_w_out[b][n_q][n_k];
+        // no racing here
+        dLdq[b][n_q][0] += dLdw * -dwdpx;
+        dLdq[b][n_q][1] += dLdw * -dwdpy;
+        dLdq[b][n_q][2] += dLdw * -dwdpz;
+
         // use atomicAdd to avoid race condition
         // dLdq and dLdp is differ by a negative sign
-        scalar_t dL2dw = grad_w_out[b][n_q][n_k]; 
-        scalar_t dLdw = dL1dfo_dfodw + dL2dw;
-        atomicAdd(&dLdq[b][n_q][0], dLdw * -dwdpx);
-        atomicAdd(&dLdq[b][n_q][1], dLdw * -dwdpy);
-        atomicAdd(&dLdq[b][n_q][2], dLdw * -dwdpz);
-
         atomicAdd(&dLdp[b][k_idx][0], dLdw * dwdpx);
         atomicAdd(&dLdp[b][k_idx][1], dLdw * dwdpy);
         atomicAdd(&dLdp[b][k_idx][2], dLdw * dwdpz);
