@@ -198,6 +198,7 @@ __global__ void knn_aggregate_aniso_backward_cuda_kernel(
     torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> dLdp,
     torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> dLdf,
     torch::PackedTensorAccessor32<scalar_t, 3, torch::RestrictPtrTraits> dLdsigma,
+    torch::PackedTensorAccessor32<scalar_t, 4, torch::RestrictPtrTraits> dLdR,
     const int K,
     const int F
 ) {
@@ -248,47 +249,54 @@ __global__ void knn_aggregate_aniso_backward_cuda_kernel(
         scalar_t dwdsigmax = -w * j_sq;
         scalar_t dwdsigmay = -w * k_sq;
         scalar_t dwdsigmaz = -w * l_sq;
+        scalar_t w_j_sigmax = -2 * w * j * sigma[b][k_idx][0];
+        scalar_t w_k_sigmay = -2 * w * k * sigma[b][k_idx][1];
+        scalar_t w_l_sigmaz = -2 * w * l * sigma[b][k_idx][2];
+        scalar_t dwdRa = w_j_sigmax * x;
+        scalar_t dwdRb = w_j_sigmax * y;
+        scalar_t dwdRc = w_j_sigmax * z;
+        scalar_t dwdRd = w_k_sigmay * x;
+        scalar_t dwdRe = w_k_sigmay * y;
+        scalar_t dwdRf = w_k_sigmay * z;
+        scalar_t dwdRg = w_l_sigmaz * x;
+        scalar_t dwdRh = w_l_sigmaz * y;
+        scalar_t dwdRi = w_l_sigmaz * z;
 
         /////////////////////////////
         //     dLdsigma and dLdf   //
         /////////////////////////////
+        scalar_t dL1dfo_dfodw = 0.0;
+        scalar_t dLdfo = 0.0;
         for (int n_f = 0; n_f < F; ++n_f) {
-            // dwdsigma = -w * d/dsigma(exp(...)) = -w * j^2
-            // dL1dsigma = (dL1dfo * dfodw + dLdw) * dwdsigma
-            scalar_t grad_fo = grad_f_out[b][n_q][n_f];
-            scalar_t dL1dfo_dfodw = grad_fo * f[b][k_idx][n_f]; 
-
-            // use atomicAdd to avoid race condition
-            // dLdq and dLdp is differ by a negative sign
-            atomicAdd(&dLdq[b][n_q][0], dL1dfo_dfodw * -dwdpx);
-            atomicAdd(&dLdq[b][n_q][1], dL1dfo_dfodw * -dwdpy);
-            atomicAdd(&dLdq[b][n_q][2], dL1dfo_dfodw * -dwdpz);
-
-            atomicAdd(&dLdp[b][k_idx][0], dL1dfo_dfodw * dwdpx);
-            atomicAdd(&dLdp[b][k_idx][1], dL1dfo_dfodw * dwdpy);
-            atomicAdd(&dLdp[b][k_idx][2], dL1dfo_dfodw * dwdpz);
-
-            atomicAdd(&dLdf[b][k_idx][n_f], grad_fo * w);
-
-            atomicAdd(&dLdsigma[b][k_idx][0], dL1dfo_dfodw * dwdsigmax);
-            atomicAdd(&dLdsigma[b][k_idx][1], dL1dfo_dfodw * dwdsigmay);
-            atomicAdd(&dLdsigma[b][k_idx][2], dL1dfo_dfodw * dwdsigmaz);
-
+            dL1dfo_dfodw += grad_f_out[b][n_q][n_f] * f[b][k_idx][n_f]; 
+            atomicAdd(&dLdf[b][k_idx][n_f], grad_f_out[b][n_q][n_f] * w);
         }
-        // add gradient from dL2dw, i.e., the case where we use w_out somewhere
+        // use atomicAdd to avoid race condition
+        // dLdq and dLdp is differ by a negative sign
         scalar_t dL2dw = grad_w_out[b][n_q][n_k]; 
-        atomicAdd(&dLdq[b][n_q][0], dL2dw * -dwdpx);
-        atomicAdd(&dLdq[b][n_q][1], dL2dw * -dwdpy);
-        atomicAdd(&dLdq[b][n_q][2], dL2dw * -dwdpz);
+        scalar_t dLdw = dL1dfo_dfodw + dL2dw;
+        atomicAdd(&dLdq[b][n_q][0], dLdw * -dwdpx);
+        atomicAdd(&dLdq[b][n_q][1], dLdw * -dwdpy);
+        atomicAdd(&dLdq[b][n_q][2], dLdw * -dwdpz);
 
-        atomicAdd(&dLdp[b][k_idx][0], dL2dw * dwdpx);
-        atomicAdd(&dLdp[b][k_idx][1], dL2dw * dwdpy);
-        atomicAdd(&dLdp[b][k_idx][2], dL2dw * dwdpz);
+        atomicAdd(&dLdp[b][k_idx][0], dLdw * dwdpx);
+        atomicAdd(&dLdp[b][k_idx][1], dLdw * dwdpy);
+        atomicAdd(&dLdp[b][k_idx][2], dLdw * dwdpz);
 
-        atomicAdd(&dLdsigma[b][k_idx][0], dL2dw * dwdsigmax);
-        atomicAdd(&dLdsigma[b][k_idx][1], dL2dw * dwdsigmay);
-        atomicAdd(&dLdsigma[b][k_idx][2], dL2dw * dwdsigmaz);
 
+        atomicAdd(&dLdsigma[b][k_idx][0], dLdw * dwdsigmax);
+        atomicAdd(&dLdsigma[b][k_idx][1], dLdw * dwdsigmay);
+        atomicAdd(&dLdsigma[b][k_idx][2], dLdw * dwdsigmaz);
+
+        atomicAdd(&dLdR[b][k_idx][0][0], dLdw * dwdRa);
+        atomicAdd(&dLdR[b][k_idx][0][1], dLdw * dwdRb);
+        atomicAdd(&dLdR[b][k_idx][0][2], dLdw * dwdRc);
+        atomicAdd(&dLdR[b][k_idx][1][0], dLdw * dwdRd);
+        atomicAdd(&dLdR[b][k_idx][1][1], dLdw * dwdRe);
+        atomicAdd(&dLdR[b][k_idx][1][2], dLdw * dwdRf);
+        atomicAdd(&dLdR[b][k_idx][2][0], dLdw * dwdRg);
+        atomicAdd(&dLdR[b][k_idx][2][1], dLdw * dwdRh);
+        atomicAdd(&dLdR[b][k_idx][2][2], dLdw * dwdRi);
     }
 }
 
@@ -611,6 +619,7 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_cuda(
     torch::Tensor dLdp = torch::zeros({B, P, 3}, p.options());
     torch::Tensor dLdf = torch::zeros({B, P, F}, f.options());
     torch::Tensor dLdsigma = torch::zeros({B, P, 3}, sigma.options());
+    torch::Tensor dLdR = torch::zeros({B, P, 3, 3}, R.options());
 
     int K = k_idxs.size(2);
     AT_DISPATCH_FLOATING_TYPES(f.scalar_type(), "knn_aggregate_aniso_backward_cuda_kernel", ([&] {
@@ -628,12 +637,13 @@ std::vector<torch::Tensor> knn_aggregate_aniso_backward_cuda(
             dLdp.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             dLdf.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             dLdsigma.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+            dLdR.packed_accessor32<scalar_t, 4, torch::RestrictPtrTraits>(),
             K,
             F
         );
     }));
     // TODO: whatelse do we need for backward?
-    return {dLdq, dLdp, dLdf, dLdsigma};
+    return {dLdq, dLdp, dLdf, dLdsigma, dLdR};
 }
 
 
