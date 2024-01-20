@@ -72,6 +72,32 @@ std::vector<torch::Tensor> knn_lookup_aggregate_aniso_forward(
     return knn_lookup_aggregate_aniso_forward_cuda(q, p, f, sigma, R, knn_table, K);
 }
 
+
+std::vector<torch::Tensor> knn_precomputed_aggregate_aniso_forward(
+    const torch::Tensor q,
+    const torch::Tensor p,
+    const torch::Tensor f,
+    const torch::Tensor sigma,
+    const torch::Tensor R,
+    const torch::Tensor knn_idxs,
+    const int K
+) {
+    /*
+        q: (B, N_query, 3)
+        p: (B, N_surface_pts, 3)
+        f: (B, N_surface_pts, C)
+        sigma: (B, N_surface_pts, 3, 3)
+        R: (B, N_surface_pts, 3, 3)
+    */
+    CHECK_INPUT(q);
+    CHECK_INPUT(p);
+    CHECK_INPUT(f);
+    CHECK_INPUT(sigma);
+    CHECK_INPUT(R);
+    CHECK_INPUT(knn_idxs);
+    return knn_precomputed_aggregate_aniso_forward_cuda(q, p, f, sigma, R, knn_idxs, K);
+}
+
 std::vector<torch::Tensor> knn_aggregate_aniso_backward(
     const torch::Tensor grad_f_out,
     const torch::Tensor grad_w_out,
@@ -153,6 +179,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("knn_aggregate_forward", &knn_aggregate_forward, "KNN aggregate forward");
     m.def("knn_aggregate_aniso_forward", &knn_aggregate_aniso_forward, "KNN aggregate aniso forward");
     m.def("knn_lookup_aggregate_aniso_forward", &knn_lookup_aggregate_aniso_forward, "KNN lookup aggregate aniso forward");
+    m.def("knn_precomputed_aggregate_aniso_forward", &knn_precomputed_aggregate_aniso_forward, "KNN lookup aggregate aniso forward");
     m.def("knn_aggregate_aniso_backward", &knn_aggregate_aniso_backward, "KNN aggregate aniso backward");
     m.def("knn_aggregate_aniso_backward_2nd", &knn_aggregate_aniso_backward_2nd, "KNN aggregate aniso second order backward");
 }
