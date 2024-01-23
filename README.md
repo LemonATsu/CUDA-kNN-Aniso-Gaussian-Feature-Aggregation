@@ -2,6 +2,7 @@
 
 This is a CUDA PyTorch binding of kNN feature aggregation with anisotropic gaussian weighting.
 
+The code supports 2nd-order backpropagation through the 1st-order gradient w.r.t the query points. This enables calculation for [Eikonal constraint](https://proceedings.mlr.press/v119/gropp20a/gropp20a.pdf) that is commonly used for regularizing Neural SDF.
 ## How does it work?
 Given `q` the query points, and `p` the feature point clouds, the function finds the k nearest neighbors of each query in the feature point clouds. The feature of the query is then determined by a weighted sum of the features from the k neighbors.
 
