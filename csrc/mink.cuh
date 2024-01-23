@@ -9,8 +9,6 @@
 #pragma once
 #define MINK_H
 
-#include "index_utils.cuh"
-
 // A data structure to keep track of the smallest K keys seen so far as well
 // as their associated values, intended to be used in device code.
 // This data structure doesn't allocate any memory; keys and values are stored
@@ -122,52 +120,3 @@ class MinK {
   int max_idx;
 };
 
-// This is a version of MinK that only touches the arrays using static indexing
-// via RegisterIndexUtils. If the keys and values are stored in thread-local
-// arrays, then this may allow the compiler to place them in registers for
-// fast access.
-//
-// This has the same API as RegisterMinK, but doesn't support sorting.
-// We found that sorting via RegisterIndexUtils gave very poor performance,
-// and suspect it may have prevented the compiler from placing the arrays
-// into registers.
-template <typename key_t, typename value_t, int K>
-class RegisterMinK {
- public:
-  __device__ RegisterMinK(key_t* keys, value_t* vals)
-      : keys(keys), vals(vals), _size(0) {}
-
-  __device__ __forceinline__ void add(const key_t& key, const value_t& val) {
-    if (_size < K) {
-      RegisterIndexUtils<key_t, K>::set(keys, _size, key);
-      RegisterIndexUtils<value_t, K>::set(vals, _size, val);
-      if (_size == 0 || key > max_key) {
-        max_key = key;
-        max_idx = _size;
-      }
-      _size++;
-    } else if (key < max_key) {
-      RegisterIndexUtils<key_t, K>::set(keys, max_idx, key);
-      RegisterIndexUtils<value_t, K>::set(vals, max_idx, val);
-      max_key = key;
-      for (int k = 0; k < K; ++k) {
-        key_t cur_key = RegisterIndexUtils<key_t, K>::get(keys, k);
-        if (cur_key > max_key) {
-          max_key = cur_key;
-          max_idx = k;
-        }
-      }
-    }
-  }
-
-  __device__ __forceinline__ int size() {
-    return _size;
-  }
-
- private:
-  key_t* keys;
-  value_t* vals;
-  int _size;
-  key_t max_key;
-  int max_idx;
-};
