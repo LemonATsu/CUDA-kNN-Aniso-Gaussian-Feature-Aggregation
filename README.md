@@ -35,3 +35,6 @@ pip install .
 - [X] Installation instructions
 - [ ] Example
 - [ ] Python packaging
+
+## Acknowledgement
+This repository borrows code ([1](https://github.com/LemonATsu/CUDA-kNN-Aniso-Gaussian-Feature-Aggregation/blob/main/csrc/mink.cuh)) from [PyTorch3D](https://github.com/facebookresearch/pytorch3d).
