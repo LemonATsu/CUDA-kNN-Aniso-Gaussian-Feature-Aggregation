@@ -226,8 +226,6 @@ class KNNAnisotropicAggregateBackward(torch.autograd.Function):
             w_out, 
             idxs
         )
-        import pdb; pdb.set_trace()
-        print
 
         return grad_f_out_2nd, None, grad_q_2nd, grad_p_2nd, grad_f_2nd, grad_sigma_2nd, grad_R_2nd, None, None
 
