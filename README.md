@@ -17,6 +17,29 @@ where
 - `sigma (B, P, 3)` is the scale of the gaussian for each point.
 Note that we split the covariance matrix into rotation and scale.
 
+## Usage
+Below is a simple example on how to use the package.
+```
+import torch
+from cuda_knn_aggregate import knn_aggregate_aniso
+
+B = 2
+Q = 1000
+P = 500
+K = 12
+F = 32
+
+# initialize query, points to query, feature, gaussian scale, and rotation
+q = torch.rand(B, Q, 3).cuda()
+p = torch.rand(B, P, 3).cuda()
+f = torch.rand(B, P, F).cuda()
+sigma = torch.rand(B, P, 3).cuda()
+R = torch.rand(B, P, 3, 3).cuda()
+
+# outputs are the aggregated feature, sum of weights, distance, and kNN indices
+f_out, w_out, dists, idxs = knn_aggregate_aniso(q, p, f, sigma, R, K)
+```
+
 ### Speedup
 Tested with `B=2`, `Q=12288`, `P=4096`, `F=64` and `K=16` on a single RTX 3080.
 The reported time is the time spent per 100 iteration, averaged over 100 trials.
@@ -39,12 +62,6 @@ To install, simply do
 ```
 pip install .
 ```
-
-## TODO:
-- [ ] Complete README
-- [X] Installation instructions
-- [ ] Example
-- [ ] Python packaging
 
 ## Acknowledgement
 This repository borrows code ([1](https://github.com/LemonATsu/CUDA-kNN-Aniso-Gaussian-Feature-Aggregation/blob/main/csrc/mink.cuh)) from [PyTorch3D](https://github.com/facebookresearch/pytorch3d).
