@@ -18,9 +18,10 @@ setup(
     author='S.-Y S',
     description='cuda_knn_aggregate',
     long_description='Direct kNN feature aggregation',
+    packages=['cuda_knn_aggregate'],
     ext_modules=[
         CUDAExtension(
-            name='cuda_knn_aggregate',
+            name='cuda_knn_aggregate._C',
             sources=SOURCES,
             include_dirs=HEADER,
             extra_compile_args={

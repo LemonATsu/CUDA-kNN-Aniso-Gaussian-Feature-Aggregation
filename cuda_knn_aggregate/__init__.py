@@ -1,6 +1,65 @@
 import torch
 import numpy as np
-import cuda_knn_aggregate
+from . import _C
+
+
+def knn_aggregate_aniso(
+    q: torch.Tensor,
+    p: torch.Tensor,
+    f: torch.Tensor,
+    sigma: torch.Tensor,
+    R: torch.Tensor,
+    K: int,      
+):
+    """ k-NN feature aggregate using anisotropic gaussian weights.
+
+    Args:
+    ----
+        q: [B, Q, 3] query point coordinates.
+        p: [B, P, 3] surface point coordinates.
+        f: [B, P, F] feature of surface points.
+        sigma: [B, P, 3] anisotropic gaussian scales along all three axes.
+        R: [B, P, 3, 3] anisotropic gaussian rotations.
+        K: int, number of nearest neighbors.
+    
+    Returns:
+    --------
+        f_out: [B, Q, F] aggregated feature.
+        w_out: [B, Q, K] weights. Note that this is not differentiable.
+        dists: [B, Q, K] distances. Note that this is not differentiable.
+        idxs: [B, Q, K] k-NN indices. Note that this is not differentiable.
+    """
+    return KNNAnisotropicAggregate.apply(q, p, f, sigma, R, K)
+
+def knn_aggregate_aniso_lookup(
+    q: torch.Tensor,
+    p: torch.Tensor,
+    f: torch.Tensor,
+    sigma: torch.Tensor,
+    R: torch.Tensor,
+    knn_table: torch.Tensor,
+    K: int,      
+):
+    """ k-NN feature aggregate using anisotropic gaussian weights, but with cached nearest neighbors.
+
+    Args:
+    ----
+        q: [B, Q, 3] query point coordinates.
+        p: [B, P, 3] surface point coordinates.
+        f: [B, P, F] feature of surface points.
+        sigma: [B, P, 3] anisotropic gaussian scales along all three axes.
+        R: [B, P, 3, 3] anisotropic gaussian rotations.
+        knn_table: [P, K] pre-computed kNN table using surface point p.
+        K: int, number of nearest neighbors.
+    
+    Returns:
+    --------
+        f_out: [B, Q, F] aggregated feature.
+        w_out: [B, Q, K] weights. Note that this is not differentiable.
+        dists: [B, Q, K] distances. Note that this is not differentiable.
+        idxs: [B, Q, K] k-NN indices. Note that this is not differentiable.
+    """
+    return KNNLookupAnisotropicAggregate.apply(q, p, f, sigma, R, knn_table, K)
 
 class KNNAnisotropicAggregate(torch.autograd.Function):
     """ Combining knn search and aggregation into one function.
@@ -26,7 +85,7 @@ class KNNAnisotropicAggregate(torch.autograd.Function):
             K: int, number of nearest neighbors.
         """
 
-        f_out, w_out, dists, idxs = cuda_knn_aggregate.knn_aggregate_aniso_forward(q, p, f, sigma, R, K)
+        f_out, w_out, dists, idxs = _C.knn_aggregate_aniso_forward(q, p, f, sigma, R, K)
         ctx.save_for_backward(q, p, f, sigma, R, w_out, idxs)
         return f_out, w_out, dists, idxs
     
@@ -81,7 +140,7 @@ class KNNLookupAnisotropicAggregate(KNNAnisotropicAggregate):
             K: int, number of nearest neighbors.
         """
 
-        f_out, w_out, dists, idxs = cuda_knn_aggregate.knn_lookup_aggregate_aniso_forward(q, p, f, sigma, R, knn_table, K)
+        f_out, w_out, dists, idxs = _C.knn_lookup_aggregate_aniso_forward(q, p, f, sigma, R, knn_table, K)
         ctx.save_for_backward(q, p, f, sigma, R, w_out, idxs)
         return f_out, w_out, dists, idxs
 
@@ -128,7 +187,7 @@ class KNNPrecomputedAnisotropicAggregate(KNNAnisotropicAggregate):
             K: int, number of nearest neighbors.
         """
 
-        f_out, w_out, dists = cuda_knn_aggregate.knn_precomputed_aggregate_aniso_forward(q, p, f, sigma, R, knn_idxs, K)
+        f_out, w_out, dists = _C.knn_precomputed_aggregate_aniso_forward(q, p, f, sigma, R, knn_idxs, K)
         ctx.save_for_backward(q, p, f, sigma, R, w_out, knn_idxs)
         return f_out, w_out, dists
 
@@ -173,7 +232,7 @@ class KNNAnisotropicAggregateBackward(torch.autograd.Function):
         """
         # df/dw is simply the sum of the feature vector.
         # FIXME: is there a better naming?
-        grad_q, grad_p, grad_f, grad_sigma, grad_R = cuda_knn_aggregate.knn_aggregate_aniso_backward(
+        grad_q, grad_p, grad_f, grad_sigma, grad_R = _C.knn_aggregate_aniso_backward(
             grad_f_out.contiguous(),
             grad_w_out.contiguous(),
             q, 
@@ -214,7 +273,7 @@ class KNNAnisotropicAggregateBackward(torch.autograd.Function):
         #assert grad_grad_sigma.sum() == 0.0, "Only supports backward via gradient of q!"
 
         grad_f_out, grad_w_out, q, p, f, sigma, R, w_out, idxs = ctx.saved_tensors 
-        grad_f_out_2nd, grad_q_2nd, grad_p_2nd, grad_f_2nd, grad_sigma_2nd, grad_R_2nd = cuda_knn_aggregate.knn_aggregate_aniso_backward_2nd(
+        grad_f_out_2nd, grad_q_2nd, grad_p_2nd, grad_f_2nd, grad_sigma_2nd, grad_R_2nd = _C.knn_aggregate_aniso_backward_2nd(
             grad_grad_q.contiguous(),
             grad_f_out.contiguous(),
             grad_w_out.contiguous(),
