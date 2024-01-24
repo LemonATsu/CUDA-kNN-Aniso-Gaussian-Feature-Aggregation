@@ -1,4 +1,8 @@
 # kNN Feature aggregation in CUDA
+  - [How does it work?](#how-does-it-work)
+  - [Usage](#usage)
+  - [Installation](#installation)
+  - [Acknowledgement](#acknowledgement)
 
 This is a CUDA PyTorch binding of kNN feature aggregation with anisotropic gaussian weighting.
 
