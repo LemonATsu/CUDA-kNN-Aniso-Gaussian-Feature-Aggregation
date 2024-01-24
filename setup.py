@@ -7,7 +7,8 @@ ROOT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'csrc')
 HEADER = [ROOT_DIR]
 SOURCES = [
     os.path.join(ROOT_DIR, 'knn_aggregate.cpp'),
-    os.path.join(ROOT_DIR, 'knn_aggregate_kernel.cu'),
+    os.path.join(ROOT_DIR, 'forward.cu'),
+    os.path.join(ROOT_DIR, 'backward.cu'),
 ]
 #SOURCES_ = glob.glob(os.path.join(ROOT_DIR, '*.cpp')) #+ glob.glob(os.path.join(ROOT_DIR, '*.cu'))
 print(SOURCES)
