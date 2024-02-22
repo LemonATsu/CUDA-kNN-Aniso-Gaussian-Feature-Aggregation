@@ -49,8 +49,8 @@ Tested with `B=2`, `Q=12288`, `P=4096`, `F=64` and `K=16` on a single RTX 3080.
 The reported time is the time spent per 100 iteration, averaged over 100 trials.
 | per 100 iters |         Forward         |         Backward        |  Backward with 2nd order |
 |---------------|:-----------------------:|:-----------------------:|:------------------------:|
-| CUDA          | 23.609 ms, ± 177.801 µs | 57.124 ms, ± 562.607 µs | 78.553 ms, ± 2708.505 µs |
-| Plain Pytorch |  3.018 ms, ± 23.738 µs  | 20.806 ms, ± 355.332 µs | 29.818 ms, ± 463.335 µs  |
+| Plain Pytorch  | 23.609 ms, ± 177.801 µs | 57.124 ms, ± 562.607 µs | 78.553 ms, ± 2708.505 µs |
+| CUDA           |  3.018 ms, ± 23.738 µs  | 20.806 ms, ± 355.332 µs | 29.818 ms, ± 463.335 µs  |
 
 Overall, we see a 7x speedup in forward, and 2-3x speed in backward.
 
